@@ -109,7 +109,8 @@ class SJE():
 
 		XW = np.dot(X_n, W)
 		# Scale the projected vector
-		XW = preprocessing.scale(XW)
+		# XW = preprocessing.scale(XW) # TODO: is this a bug because this isn't L2 normalization?
+		XW = XW / np.linalg.norm(XW)
 		scores = np.zeros(self.train_sig.shape[1])
 		scores[y_n] = 0.0
 		gt_class_score = np.dot(XW, self.train_sig[:, y_n])

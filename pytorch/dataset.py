@@ -6,7 +6,7 @@ from utils import normalizeFeaturesL2
 class ZSLDataset(torch.utils.data.Dataset):
 
     def __init__(self, dataset_name, split, norm_type='none', norm_info=None):
-        assert dataset_name in ('APY', 'AWA1', 'AWA2', 'CUB', 'ImageNet', 'SUN')
+        assert dataset_name in ('APY', 'AWA1', 'AWA2', 'CUB', 'SUN')
         loc_dict = {'train': 'train_loc', 'val': 'val_loc', 'test': 'test_unseen_loc'}
         assert split in loc_dict
         loc = loc_dict[split]
@@ -29,7 +29,7 @@ class ZSLDataset(torch.utils.data.Dataset):
         self.length = len(self.labels)
         assert self.length == self.img_features.shape[0]
 
-        assert norm_type in ('std', 'l2', 'none')
+        assert norm_type in ('std', 'L2', 'None')
         if norm_type == 'std':
             if split == 'train':
                 self.norm_info = {
@@ -43,11 +43,20 @@ class ZSLDataset(torch.utils.data.Dataset):
             std[std == 0] = 1
             mean = self.norm_info['mean'].unsqueeze(0)
             self.img_features = (self.img_features - mean) / std
-        elif norm_type == 'l2':
+        elif norm_type == 'L2':
 			self.img_features = normalizeFeaturesL2(self.img_features)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, idx):
-        return {'img': self.img_features[idx,:], 'label': self.labels[idx]}
+        img = self.img_features[idx,:]
+        label = self.labels[idx]
+        class_attributes = self.class_attributes[:,labels]
+        return {'img': img, 'label': label, 'class_attributes': class_attributes}
+
+    def get_num_attributes(self):
+        return self.class_attributes.shape[0]
+
+    def get_img_feature_size(self):
+        return self.img_features.shape[1]
