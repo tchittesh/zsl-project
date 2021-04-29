@@ -6,16 +6,16 @@ from utils import normalizeFeaturesL2
 class SJE_Original(nn.Module):
 
     def __init__(self, img_feature_size, num_attributes, margin):
-		super().__init__()
+        super(SJE_Original, self).__init__()
         self.margin = margin
         
         # copying initialization technique from original code
-        self.W = torch.rand(img_feature_size, num_attributes, requires_grad=True)
-        self.W = normalizeFeaturesL2(W.permute(1,0)).permute(0,1)
-		W = np.random.rand(self.X_train.shape[0], self.train_sig.shape[0])
+        W = torch.rand(img_feature_size, num_attributes, requires_grad=True)
+        W = normalizeFeaturesL2(W.permute(1,0)).permute(1,0)
+        self.W = nn.Parameter(W, requires_grad=True)
 
     def forward(self, *args, **kwargs):
-        if self.train:
+        if self.training:
             return self.forward_train(*args, **kwargs)
         else:
             return self.forward_test(*args, **kwargs)
