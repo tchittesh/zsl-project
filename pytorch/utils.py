@@ -1,4 +1,4 @@
-def normalizeFeaturesL2(self, x):
+def normalizeFeaturesL2(x):
     '''
     normalize tensor x by its L2 norm in the feature dimension
     expects a tensor x of shape [N, d] as input, where N is the number of

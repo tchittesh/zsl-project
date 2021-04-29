@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import io, spatial
 import torch
 
 from utils import normalizeFeaturesL2
@@ -12,19 +13,19 @@ class ZSLDataset(torch.utils.data.Dataset):
         loc = loc_dict[split]
         
         # load data
-		data_folder = '../xlsa17/data/'+dataset_name+'/'
-		res101 = io.loadmat(data_folder+'res101.mat')
-		att_splits=io.loadmat(data_folder+'att_splits.mat')
+        data_folder = '../xlsa17/data/'+dataset_name+'/'
+        res101 = io.loadmat(data_folder+'res101.mat')
+        att_splits=io.loadmat(data_folder+'att_splits.mat')
 
         # filter based on split
-		self.img_features = torch.Tensor(res101['features'][:, np.squeeze(att_splits[loc]-1)]).permute(1,0) # shape [N,d]
-		self.labels = torch.Tensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
-		unique_labels = np.unique(self.labels)
-		i=0
-		for label in unique_labels:
-			self.labels[self.label == label] = i    
-			i+=1
-		self.class_attributes = torch.Tensor(att_splits['att'][:, unique_labels-1]) # shape [num_attributes, num_classes]
+        self.img_features = torch.Tensor(res101['features'][:, np.squeeze(att_splits[loc]-1)]).permute(1,0) # shape [N,d]
+        self.labels = torch.LongTensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
+        unique_labels = np.unique(self.labels)
+        i=0
+        for label in unique_labels:
+            self.labels[self.labels == label] = i
+            i+=1
+        self.class_attributes = torch.Tensor(att_splits['att'][:, unique_labels-1]) # shape [num_attributes, num_classes]
 
         self.length = len(self.labels)
         assert self.length == self.img_features.shape[0]
@@ -44,7 +45,7 @@ class ZSLDataset(torch.utils.data.Dataset):
             mean = self.norm_info['mean'].unsqueeze(0)
             self.img_features = (self.img_features - mean) / std
         elif norm_type == 'L2':
-			self.img_features = normalizeFeaturesL2(self.img_features)
+            self.img_features = normalizeFeaturesL2(self.img_features)
 
     def __len__(self):
         return self.length
@@ -52,7 +53,7 @@ class ZSLDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         img = self.img_features[idx,:]
         label = self.labels[idx]
-        class_attributes = self.class_attributes[:,labels]
+        class_attributes = self.class_attributes[:,label]
         return {'img': img, 'label': label, 'class_attributes': class_attributes}
 
     def get_num_attributes(self):
