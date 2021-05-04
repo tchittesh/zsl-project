@@ -9,14 +9,17 @@ from tqdm import tqdm
 
 from dataset import ZSLDataset
 from sje import SJE_Original, SJE_Linear, SJE_MLP
+from sje import SJE_Original
+from sje_cos_emb import SJE_CosEmb
+from sje_mha import SJE_MHA
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('-data', '--dataset', help='choose between APY, AWA2, AWA1, CUB, SUN', default='AWA2', type=str)
-parser.add_argument('-m', '--model', help='choose between Original, Linear, MLP', default='AWA2', type=str)
-parser.add_argument('-e', '--epochs', default=100, type=int)
+parser.add_argument('-m', '--model', help='choose between Original, Linear, MLP', default='cos_emb', type=str)
+parser.add_argument('-e', '--epochs', default=10, type=int)
 parser.add_argument('-es', '--early_stop', default=10, type=int)
-parser.add_argument('-norm', '--norm_type', help='std(standard), L2, None', default='std', type=str)
+parser.add_argument('-norm', '--norm_type', help='std(standard), L2, None', default='L2', type=str)
 parser.add_argument('-lr', '--lr', default=0.01, type=float)
 parser.add_argument('-mr', '--margin', default=1, type=float)
 parser.add_argument('-seed', '--rand_seed', default=None, type=int)
@@ -26,6 +29,7 @@ model_dict = {
     'MLP': SJE_MLP,
     'Linear': SJE_Linear,
 }
+parser.add_argument('-seed', '--rand_seed', default=41, type=int)
 
 
 def train(model, dataloader, optimizer, device):
@@ -33,7 +37,7 @@ def train(model, dataloader, optimizer, device):
     model.train()
     avg_loss = 0.0
     len_data = 0
-    for batch_data in dataloader:
+    for batch_data in tqdm(dataloader):
         # unpack data
         img_features = batch_data['img'].to(device)
         labels = batch_data['label'].to(device)
@@ -42,7 +46,6 @@ def train(model, dataloader, optimizer, device):
         B = len(img_features)
 
         # forward and backward pass
-        optimizer.zero_grad()
         optimizer.zero_grad()
         loss = model(img_features, all_class_attributes, class_attributes, labels)
         loss.backward()
@@ -59,7 +62,7 @@ def evaluate(model, dataloader, device):
     num_correct = 0
     num_total = 0
     len_data = 0
-    for batch_data in dataloader:
+    for batch_data in tqdm(dataloader):
         # unpack data
         img_features = batch_data['img'].to(device)
         labels = batch_data['label'].to(device)
@@ -85,12 +88,16 @@ def main(args):
     val_dataset = ZSLDataset(args.dataset, 'val', norm_type=args.norm_type, norm_info=norm_info)
     test_dataset = ZSLDataset(args.dataset, 'test', norm_type=args.norm_type, norm_info=norm_info)
 
+    print("Loaded datasets!")
+
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=True, num_workers=4)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=True, num_workers=4)
 
     device = 'cpu'#torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = model_dict[args.model](train_dataset.get_img_feature_size(), train_dataset.get_num_attributes(), margin=args.margin).to(device)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
 
     best_val_acc = 0.0
@@ -98,36 +105,40 @@ def main(args):
     best_val_ep = -1
     best_train_ep = -1
     best_params = None
-    
+
     for ep in tqdm(range(args.epochs)):
         start = time.time()
 
-        train(model, train_dataloader, optimizer, device)
-        print(time.time() - start)
+        tr_loss = train(model, train_dataloader, optimizer, device)
+
+        print("Training done in ", time.time() - start, " Loss is :", tr_loss.item())
         train_acc = evaluate(model, train_dataloader, device)
         print(time.time() - start)
         val_acc = evaluate(model, val_dataloader, device)
         print(time.time() - start)
 
         end = time.time()
-        elapsed = end-start
+        elapsed = end - start
 
-        print('Epoch:{}; Train Acc:{}; Val Acc:{}; Time taken:{:.0f}m {:.0f}s\n'.format(ep+1, train_acc, val_acc, elapsed//60, elapsed%60))
+        print('Epoch:{}; Train Acc:{}; Val Acc:{}; Time taken:{:.0f}m {:.0f}s\n'.format(ep + 1, train_acc, val_acc,
+                                                                                        elapsed // 60, elapsed % 60))
 
-        if val_acc>best_val_acc:
+        if val_acc > best_val_acc:
             best_val_acc = val_acc
             best_val_ep = ep+1
             best_params = deepcopy(model.state_dict())
-        
-        if train_acc>best_train_acc:
-            best_train_ep = ep+1
+
+        if train_acc > best_train_acc:
+            best_train_ep = ep + 1
             best_train_acc = train_acc
 
-        if ep+1-best_val_ep>args.early_stop:
-            print('Early Stopping by {} epochs. Exiting...'.format(args.epochs-(ep+1)))
+        if ep + 1 - best_val_ep > args.early_stop:
+            print('Early Stopping by {} epochs. Exiting...'.format(args.epochs - (ep + 1)))
             break
 
-    print('\nBest Val Acc:{} @ Epoch {}. Best Train Acc:{} @ Epoch {}\n'.format(best_val_acc, best_val_ep, best_train_acc, best_train_ep))
+    print(
+        '\nBest Val Acc:{} @ Epoch {}. Best Train Acc:{} @ Epoch {}\n'.format(best_val_acc, best_val_ep, best_train_acc,
+                                                                              best_train_ep))
 
     assert best_params is not None
     model.load_state_dict(best_params)
