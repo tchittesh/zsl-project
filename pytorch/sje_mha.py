@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 from utils import normalizeFeaturesL2
 
 
@@ -14,6 +14,7 @@ class SJE_MHA(nn.Module):
         W = torch.rand(img_feature_size, num_attributes, requires_grad=True)
         W = normalizeFeaturesL2(W.permute(1, 0)).permute(1, 0)
         self.W = nn.Parameter(W, requires_grad=True)
+        self.attn = torch.nn.MultiheadAttention(2048, num_heads=1, dropout=0.2, kdim=85, vdim=85)
 
     def forward(self, *args, **kwargs):
         if self.training:
@@ -29,8 +30,10 @@ class SJE_MHA(nn.Module):
         all_class_attributes: torch.Tensor of shape [num_attributes, num_classes]
         returns scalar loss
         '''
-        print(img_features.shape)
-        print(class_attributes.shape)
+
+        img_features = img_features.permute(2, 3, 0, 1)
+        img_features = img_features.view(-1, 3, 2048)
+        # att, att_wts = self.attn(query=img_features, key=)
         XW = torch.matmul(img_features.unsqueeze(1), self.W).squeeze(1)  # shape [B, num_attributes]
         XW = normalizeFeaturesL2(XW)  # normalize each projected vector to have unit length
         scores = torch.matmul(XW.unsqueeze(1), all_class_attributes).squeeze(1)  # shape [B, num_classes]

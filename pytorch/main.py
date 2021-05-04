@@ -9,27 +9,30 @@ from tqdm import tqdm
 
 from dataset import ZSLDataset
 from sje import SJE_Original, SJE_Linear, SJE_MLP
-from sje import SJE_Original
 from sje_cos_emb import SJE_CosEmb
+from sje_4d import SJE_Spatial
 from sje_mha import SJE_MHA
+from baseline import Baseline
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('-data', '--dataset', help='choose between APY, AWA2, AWA1, CUB, SUN', default='AWA2', type=str)
-parser.add_argument('-m', '--model', help='choose between Original, Linear, MLP', default='cos_emb', type=str)
+parser.add_argument('-m', '--model', help='choose between Original, Linear, MLP', default='Spatial', type=str)
 parser.add_argument('-e', '--epochs', default=10, type=int)
 parser.add_argument('-es', '--early_stop', default=10, type=int)
 parser.add_argument('-norm', '--norm_type', help='std(standard), L2, None', default='L2', type=str)
 parser.add_argument('-lr', '--lr', default=0.01, type=float)
 parser.add_argument('-mr', '--margin', default=1, type=float)
-parser.add_argument('-seed', '--rand_seed', default=None, type=int)
+parser.add_argument('-seed', '--rand_seed', default=41, type=int)
 
 model_dict = {
     'Original': SJE_Original,
     'MLP': SJE_MLP,
     'Linear': SJE_Linear,
+    'Spatial': SJE_Spatial,
+    'MHA': SJE_MHA,
+    'Baseline': Baseline
 }
-parser.add_argument('-seed', '--rand_seed', default=41, type=int)
 
 
 def train(model, dataloader, optimizer, device):
@@ -90,12 +93,13 @@ def main(args):
 
     print("Loaded datasets!")
 
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=4)
-    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=True, num_workers=4)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=True, num_workers=4)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=2, shuffle=True, num_workers=0)
+    test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=True, num_workers=0)
+    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=True, num_workers=0)
 
-    device = 'cpu'#torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = model_dict[args.model](train_dataset.get_img_feature_size(), train_dataset.get_num_attributes(), margin=args.margin).to(device)
+    device = 'cpu'  # torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model_dict[args.model](train_dataset.get_img_feature_size(), train_dataset.get_num_attributes(),
+                                   margin=args.margin).to(device)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
@@ -125,7 +129,7 @@ def main(args):
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
-            best_val_ep = ep+1
+            best_val_ep = ep + 1
             best_params = deepcopy(model.state_dict())
 
         if train_acc > best_train_acc:
