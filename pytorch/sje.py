@@ -28,7 +28,8 @@ class SJE_Original(nn.Module):
         all_class_attributes: torch.Tensor of shape [num_attributes, num_classes]
         returns scalar loss
         '''
-
+        print(img_features.shape)
+        print(class_attributes.shape)
         XW = torch.matmul(img_features.unsqueeze(1), self.W).squeeze(1) # shape [B, num_attributes]
         XW = normalizeFeaturesL2(XW) # normalize each projected vector to have unit length
         scores = torch.matmul(XW.unsqueeze(1), all_class_attributes).squeeze(1) # shape [B, num_classes]
