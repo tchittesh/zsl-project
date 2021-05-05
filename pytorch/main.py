@@ -7,7 +7,7 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-from dataset import ZSLDataset
+from dataset import ZSLDataset, ZSLSpatialDataset
 from sje import SJE_Original, SJE_Linear, SJE_MLP
 from sje import SJE_Original
 from sje_cos_emb import SJE_CosEmb
@@ -18,18 +18,18 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-data', '--dataset', help='choose between APY, AWA2, AWA1, CUB, SUN', default='AWA2', type=str)
 parser.add_argument('-m', '--model', help='choose between Original, Linear, MLP', default='cos_emb', type=str)
 parser.add_argument('-e', '--epochs', default=10, type=int)
+parser.add_argument('-s', '--spatial', action='store_true')
 parser.add_argument('-es', '--early_stop', default=10, type=int)
 parser.add_argument('-norm', '--norm_type', help='std(standard), L2, None', default='L2', type=str)
 parser.add_argument('-lr', '--lr', default=0.01, type=float)
 parser.add_argument('-mr', '--margin', default=1, type=float)
-parser.add_argument('-seed', '--rand_seed', default=None, type=int)
+parser.add_argument('-seed', '--rand_seed', default=42, type=int)
 
 model_dict = {
     'Original': SJE_Original,
     'MLP': SJE_MLP,
     'Linear': SJE_Linear,
 }
-parser.add_argument('-seed', '--rand_seed', default=41, type=int)
 
 
 def train(model, dataloader, optimizer, device):
@@ -37,7 +37,7 @@ def train(model, dataloader, optimizer, device):
     model.train()
     avg_loss = 0.0
     len_data = 0
-    for batch_data in tqdm(dataloader):
+    for batch_data in dataloader:
         # unpack data
         img_features = batch_data['img'].to(device)
         labels = batch_data['label'].to(device)
@@ -62,7 +62,7 @@ def evaluate(model, dataloader, device):
     num_correct = 0
     num_total = 0
     len_data = 0
-    for batch_data in tqdm(dataloader):
+    for batch_data in dataloader:
         # unpack data
         img_features = batch_data['img'].to(device)
         labels = batch_data['label'].to(device)
@@ -83,10 +83,16 @@ def main(args):
         np.random.seed(args.rand_seed)
         torch.manual_seed(args.rand_seed)
 
-    train_dataset = ZSLDataset(args.dataset, 'train', norm_type=args.norm_type)
-    norm_info = train_dataset.norm_info if hasattr(train_dataset, 'norm_info') else None
-    val_dataset = ZSLDataset(args.dataset, 'val', norm_type=args.norm_type, norm_info=norm_info)
-    test_dataset = ZSLDataset(args.dataset, 'test', norm_type=args.norm_type, norm_info=norm_info)
+    if args.spatial:
+        train_dataset = ZSLSpatialDataset(args.dataset, 'train', norm_type=args.norm_type)
+        norm_info = train_dataset.norm_info if hasattr(train_dataset, 'norm_info') else None
+        val_dataset = ZSLSpatialDataset(args.dataset, 'val', norm_type=args.norm_type, norm_info=norm_info)
+        test_dataset = ZSLSpatialDataset(args.dataset, 'test', norm_type=args.norm_type, norm_info=norm_info)
+    else:
+        train_dataset = ZSLDataset(args.dataset, 'train', norm_type=args.norm_type)
+        norm_info = train_dataset.norm_info if hasattr(train_dataset, 'norm_info') else None
+        val_dataset = ZSLDataset(args.dataset, 'val', norm_type=args.norm_type, norm_info=norm_info)
+        test_dataset = ZSLDataset(args.dataset, 'test', norm_type=args.norm_type, norm_info=norm_info)
 
     print("Loaded datasets!")
 
@@ -94,9 +100,8 @@ def main(args):
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1000, shuffle=True, num_workers=4)
     val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1000, shuffle=True, num_workers=4)
 
-    device = 'cpu'#torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = model_dict[args.model](train_dataset.get_img_feature_size(), train_dataset.get_num_attributes(), margin=args.margin).to(device)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model_dict[args.model](train_dataset.get_img_feature_size(), train_dataset.get_num_attributes(), margin=args.margin).to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
 
