@@ -80,6 +80,7 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
         # filter based on split
         h5_file = h5py.File(data_folder+f'res101_77_{split}.h5', "r")
         self.img_features = h5_file['features'] # shape [N,d,H,W]
+        self.img_names = h5_file['imgnames']
 
         self.labels = torch.LongTensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
         unique_labels = np.unique(self.labels)
@@ -95,6 +96,12 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
         self.norm_type = norm_type
         self.norm_info = norm_info
         self.split = split
+        if self.split == 'train' and self.norm_type == 'std' and self.norm_info is None:
+            self.norm_info = {
+                'std': self.img_features.std(0),
+                'mean': self.img_features.mean(0),
+            }
+
 
     def __len__(self):
         return self.length
@@ -103,14 +110,6 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
         img = torch.Tensor(self.img_features[idx,...]) # shape [C,H,W]
         # normalize
         if self.norm_type == 'std':
-            if self.split == 'train':
-                self.norm_info = {
-                    'std': self.img_features.std(0),
-                    'mean': self.img_features.mean(0),
-                }
-            else:
-                assert norm_info is not None
-                self.norm_info = norm_info
             std = self.norm_info['std'].unsqueeze(0)
             std[std == 0] = 1
             mean = self.norm_info['mean'].unsqueeze(0)
