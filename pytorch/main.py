@@ -4,7 +4,11 @@ import time
 from copy import deepcopy
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 import numpy as np
+import matplotlib
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from tqdm import tqdm
 
 from dataset import ZSLDataset, ZSLSpatialDataset
@@ -62,6 +66,9 @@ def evaluate(model, dataloader, device):
     num_correct = 0
     num_total = 0
     len_data = 0
+    y_true = []
+    y_pred = []
+    classes = dataloader.dataset.classes
     for batch_data in dataloader:
         # unpack data
         img_features = batch_data['img'].to(device)
@@ -74,7 +81,22 @@ def evaluate(model, dataloader, device):
 
         num_correct += (labels == preds).float().sum()
         num_total += B
-    return num_correct / num_total
+        y_true.extend(classes[labels.cpu().detach().numpy()].tolist())
+        y_pred.extend(classes[preds.cpu().detach().numpy()].tolist())
+    accuracy = num_correct / num_total
+    cm = confusion_matrix(y_true, y_pred, labels=classes)
+    cm_display = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=classes)
+    per_cls_acc = ''
+    for cls, total, num_correct in zip(classes, cm, cm.diagonal()):
+        per_cls_acc += f'{cls:20}  {num_correct/sum(total)}  \n'
+    return accuracy, cm_display, per_cls_acc
+
+def log_confusion_matrix(cm_disp, writer, tag, epoch):
+    fig, ax = plt.subplots(figsize=(8,8))
+    cm_disp.plot(ax=ax, xticks_rotation='vertical', include_values=False)
+    plt.tight_layout()
+    writer.add_figure(tag, fig, epoch)
+    plt.close(fig)
 
 
 def main(args):
@@ -110,18 +132,25 @@ def main(args):
     best_val_ep = -1
     best_train_ep = -1
     best_params = None
+    writer = SummaryWriter()
+    matplotlib.rc("font", size=8)
 
     for ep in tqdm(range(args.epochs)):
         start = time.time()
 
         tr_loss = train(model, train_dataloader, optimizer, device)
+        writer.add_scalar('Loss/train', tr_loss, ep)
         # print(model.get_weights())
 
         print("Training done in ", time.time() - start, " Loss is :", tr_loss.item())
-        train_acc = evaluate(model, train_dataloader, device)
-        print(time.time() - start)
-        val_acc = evaluate(model, val_dataloader, device)
-        print(time.time() - start)
+        train_acc, train_cm_disp, train_cls_acc = evaluate(model, train_dataloader, device)
+        val_acc, val_cm_disp, val_cls_acc = evaluate(model, val_dataloader, device)
+        writer.add_scalar('Accuracy/train', train_acc, ep)
+        writer.add_scalar('Accuracy/val', val_acc, ep)
+        log_confusion_matrix(train_cm_disp, writer, 'Confusion Matrix/train', ep)
+        log_confusion_matrix(val_cm_disp, writer, 'Confusion Matrix/val', ep)
+        writer.add_text('Class Accuracy/train', train_cls_acc, ep)
+        writer.add_text('Class Accuracy/val', val_cls_acc, ep)
 
         end = time.time()
         elapsed = end - start
@@ -148,7 +177,10 @@ def main(args):
 
     assert best_params is not None
     model.load_state_dict(best_params)
-    test_acc = evaluate(model, test_dataloader, device)
+    test_acc, test_cm_disp, test_cls_acc = evaluate(model, test_dataloader, device)
+    writer.add_scalar('Accuracy/test', test_acc, best_val_ep)
+    log_confusion_matrix(test_cm_disp, writer, 'Confusion Matrix/test', ep)
+    writer.add_text('Class Accuracy/test', test_cls_acc, ep)
     print('Test Acc:{}'.format(test_acc))
 
 

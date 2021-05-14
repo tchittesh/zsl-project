@@ -5,6 +5,10 @@ import h5py
 
 from utils import normalizeFeaturesL2
 
+AWA2_CLASSES = ['antelope', 'grizzly+bear', 'killer+whale', 'beaver', 'dalmatian', 'persian+cat', 'horse', 'german+shepherd', 'blue+whale', 'siamese+cat', 'skunk', 'mole', 'tiger', 'hippopotamus', 'leopard', 'moose', 'spider+monkey', 'humpback+whale', 'elephant', 'gorilla', 'ox', 'fox', 'sheep', 'seal', 'chimpanzee', 'hamster', 'squirrel', 'rhinoceros', 'rabbit', 'bat', 'giraffe', 'wolf', 'chihuahua', 'rat', 'weasel', 'otter', 'buffalo', 'zebra', 'giant+panda', 'deer', 'bobcat', 'pig', 'lion', 'mouse', 'polar+bear', 'collie', 'walrus', 'raccoon', 'cow', 'dolphin']
+
+AWA2_ATTRIBUTES = ['black', 'white', 'blue', 'brown', 'gray', 'orange', 'red', 'yellow', 'patches', 'spots', 'stripes', 'furry', 'hairless', 'toughskin', 'big', 'small', 'bulbous', 'lean', 'flippers', 'hands', 'hooves', 'pads', 'paws', 'longleg', 'longneck', 'tail', 'chewteeth', 'meatteeth', 'buckteeth', 'strainteeth', 'horns', 'claws', 'tusks', 'smelly', 'flys', 'hops', 'swims', 'tunnels', 'walks', 'fast', 'slow', 'strong', 'weak', 'muscle', 'bipedal', 'quadrapedal', 'active', 'inactive', 'nocturnal', 'hibernate', 'agility', 'fish', 'meat', 'plankton', 'vegetation', 'insects', 'forager', 'grazer', 'hunter', 'scavenger', 'skimmer', 'stalker', 'newworld', 'oldworld', 'arctic', 'coastal', 'desert', 'bush', 'plains', 'forest', 'fields', 'jungle', 'mountains', 'ocean', 'ground', 'water', 'tree', 'cave', 'fierce', 'timid', 'smart', 'group', 'solitary', 'nestspot', 'domestic']
+
 class ZSLDataset(torch.utils.data.Dataset):
 
     def __init__(self, dataset_name, split, norm_type='none', norm_info=None):
@@ -22,6 +26,8 @@ class ZSLDataset(torch.utils.data.Dataset):
         self.img_features = torch.Tensor(res101['features'][:, np.squeeze(att_splits[loc]-1)]).permute(1,0) # shape [N,d]
         self.labels = torch.LongTensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
         unique_labels = np.unique(self.labels)
+        self.attributes = AWA2_ATTRIBUTES
+        self.classes = np.array(AWA2_CLASSES)[unique_labels-1]
         i=0
         for label in unique_labels:
             self.labels[self.labels == label] = i
@@ -84,6 +90,8 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
 
         self.labels = torch.LongTensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
         unique_labels = np.unique(self.labels)
+        self.attributes = AWA2_ATTRIBUTES
+        self.classes = np.array(AWA2_CLASSES)[unique_labels-1]
         i=0
         for label in unique_labels:
             self.labels[self.labels == label] = i
