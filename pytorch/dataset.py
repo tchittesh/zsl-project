@@ -105,6 +105,7 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
         self.class_attributes = torch.Tensor(att_splits['att'][:, unique_labels-1]) # shape [num_attributes, num_classes]
 
         self.length = len(self.labels)
+        assert self.length == self.img_features.shape[0]
 
         assert norm_type in ('std', 'L2', 'None')
         self.norm_type = norm_type

@@ -1,3 +1,5 @@
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -19,6 +21,7 @@ class SJE_GMPool(nn.Module):
 
         power = torch.zeros(num_attributes, requires_grad=True)
         self.power = nn.Parameter(power, requires_grad=True)
+        self.example_indices = random.choices(range(1000), k=2) # this is a hack
 
     def get_power(self):
         c = float(10)
@@ -84,10 +87,9 @@ class SJE_GMPool(nn.Module):
 
     def log_spatial_examples(self, dataloader, device, writer, split, epoch):
         dataset = dataloader.dataset
-        indices = random.choices(range(len(dataset)), k=2)
         self.eval()
         classes = dataset.classes
-        for i, idx in enumerate(indices):
+        for i, idx in enumerate(self.example_indices):
             # unpack data
             data = dataset[idx]
             img_features = data['img'].to(device).unsqueeze(0)
@@ -100,16 +102,13 @@ class SJE_GMPool(nn.Module):
             XW = torch.tensordot(img_features, self.W, [[1],[0]]).permute(0,3,1,2).squeeze() # shape [num_attributes, H, W]
 
             for spatial_dist, gt_attribute_score, attribute_name in zip(XW, gt_class_attributes, dataset.attributes):
-                fig, ax = plt.subplots()
-                ax.set_title(f"Attribute: {attribute_name}, GT Attribute Value: {gt_attribute_score}")
-                ax.imshow(spatial_dist)
+                fig, (ax1,ax2) = plt.subplots(nrows=1,ncols=2)
+                ax1.set_title(f"Attribute: {attribute_name}\nGT Attribute Value: {gt_attribute_score:.4f}")
+                mappable = ax1.imshow(spatial_dist.cpu().detach().numpy(), vmin=-0.25, vmax=0.25)
+                fig.colorbar(mappable, ax=ax1)
+                ax2.set_title(f"Original Image({gt_label})")
+                ax2.imshow(img)
                 plt.tight_layout()
                 writer.add_figure(f"Spatial Examples ({split})/{attribute_name}-{i}", fig, epoch)
                 plt.close(fig)
-            fig, ax = plt.subplots()
-            ax.set_title(f"Original Image ({gt_label})")
-            ax.imshow(img)
-            plt.tight_layout()
-            writer.add_figure(f"Spatial Examples ({split})/{split}", fig, epoch)
-            plt.close(fig)
 

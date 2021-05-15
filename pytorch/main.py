@@ -188,6 +188,9 @@ def main(args):
             log_confusion_matrix(val_cm_disp, writer, 'Confusion Matrix/val', ep)
             writer.add_text('Class Accuracy/val', val_cls_acc, ep)
             log_example_images(model, val_dataloader, device, writer, 'val', ep)
+            if args.model == 'GMPool':
+                model.log_spatial_examples(train_dataloader, device, writer, 'train', ep)
+                model.log_spatial_examples(val_dataloader, device, writer, 'val', ep)
 
         end = time.time()
         elapsed = end - start

@@ -103,6 +103,8 @@ class SJE_WeightedCosine(nn.Module):
         weights = torch.zeros(num_attributes, requires_grad=True)
         self.weights = nn.Parameter(weights, requires_grad=True)
 
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+
     def get_weights(self):
         weights = self.weights + 1.0
         return weights / weights.sum() * len(weights) # normalize weights
@@ -121,6 +123,8 @@ class SJE_WeightedCosine(nn.Module):
         all_class_attributes: torch.Tensor of shape [num_attributes, num_classes]
         returns scalar loss
         '''
+        if len(img_features.shape) == 4:
+            img_features = self.avg_pool(img_features).squeeze(2).squeeze(2) # remove h, w dimensions
         XW = torch.matmul(img_features.unsqueeze(1), self.W).squeeze(1) # shape [B, num_attributes]
         XW = normalizeFeaturesL2(XW) # normalize each projected vector to have unit length
 
@@ -135,6 +139,8 @@ class SJE_WeightedCosine(nn.Module):
         return losses.clamp(0).mean()
 
     def forward_test(self, img_features, all_class_attributes):
+        if len(img_features.shape) == 4:
+            img_features = self.avg_pool(img_features).squeeze(2).squeeze(2) # remove h, w dimensions
         XW = torch.matmul(img_features.unsqueeze(1), self.W).squeeze(1) # shape [B, num_attributes]
         XW = normalizeFeaturesL2(XW) # normalize each projected vector to have unit length
 
