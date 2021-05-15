@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from tqdm import tqdm
 
@@ -15,25 +16,29 @@ from dataset import ZSLDataset, ZSLSpatialDataset
 from sje import SJE_Original, SJE_Linear, SJE_MLP, SJE_WeightedCosine
 from sje_cos_emb import SJE_CosEmb
 from sje_mha import SJE_MHA
+from sje_gmpool import SJE_GMPool
 
 model_dict = {
     'Original': SJE_Original,
     'MLP': SJE_MLP,
     'Linear': SJE_Linear,
     'WeightedCosine': SJE_WeightedCosine,
+    'MHA': SJE_MHA,
+    'GMPool': SJE_GMPool,
 }
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('-data', '--dataset', help='choose between APY, AWA2, AWA1, CUB, SUN', default='AWA2', type=str)
 parser.add_argument('-m', '--model', help=f'choose between {list(model_dict.keys())}', default='cos_emb', type=str)
-parser.add_argument('-e', '--epochs', default=10, type=int)
+parser.add_argument('-e', '--epochs', default=10, type=int) #CHANGE THIS
 parser.add_argument('-s', '--spatial', action='store_true')
+parser.add_argument('-l', '--logging', action='store_true')
 parser.add_argument('-es', '--early_stop', default=10, type=int)
 parser.add_argument('-norm', '--norm_type', help='std(standard), L2, None', default='L2', type=str)
-parser.add_argument('-lr', '--lr', default=0.01, type=float)
-parser.add_argument('-mr', '--margin', default=1, type=float)
-parser.add_argument('-seed', '--rand_seed', default=42, type=int)
+parser.add_argument('-lr', '--lr', default=0.01, type=float)#CHANGE THIS
+parser.add_argument('-mr', '--margin', default=1, type=float)#CHANGE THIS
+parser.add_argument('-seed', '--rand_seed', default=42, type=int)#CHANGE THIS
 
 
 def train(model, dataloader, optimizer, device):
@@ -98,6 +103,28 @@ def log_confusion_matrix(cm_disp, writer, tag, epoch):
     writer.add_figure(tag, fig, epoch)
     plt.close(fig)
 
+def log_example_images(model, dataloader, device, writer, split, epoch):
+    dataset = dataloader.dataset
+    indices = random.choices(range(len(dataset)), k=5)
+    model.eval()
+    classes = dataset.classes
+    for i, idx in enumerate(indices):
+        # unpack data
+        data = dataset[idx]
+        img_features = data['img'].to(device).unsqueeze(0)
+        gt_label = classes[data['label']]
+        all_class_attributes = dataset.class_attributes.to(device)
+        img = mpimg.imread(dataset.get_img_path(idx))
+
+        # forward pass
+        pred_label = classes[model(img_features, all_class_attributes).squeeze(0)]
+        
+        fig, ax = plt.subplots()
+        ax.set_title(f"Pred: {pred_label}, GT: {gt_label}")
+        ax.imshow(img)
+        plt.tight_layout()
+        writer.add_figure(f"Example Images ({split})/{i}", fig, epoch)
+        plt.close(fig)
 
 def main(args):
     if args.rand_seed is not None:
@@ -132,25 +159,35 @@ def main(args):
     best_val_ep = -1
     best_train_ep = -1
     best_params = None
-    writer = SummaryWriter()
-    matplotlib.rc("font", size=8)
+    if args.logging:
+        writer = SummaryWriter()
+        matplotlib.rc("font", size=8)
 
     for ep in tqdm(range(args.epochs)):
         start = time.time()
 
         tr_loss = train(model, train_dataloader, optimizer, device)
-        writer.add_scalar('Loss/train', tr_loss, ep)
-        # print(model.get_weights())
+        if args.model == "GMPool":
+            print(model.power)
+            print(model.get_power())
+        elif args.model == "WeightedCosine":
+            print(model.weights)
+            print(model.get_weights())
 
         print("Training done in ", time.time() - start, " Loss is :", tr_loss.item())
         train_acc, train_cm_disp, train_cls_acc = evaluate(model, train_dataloader, device)
         val_acc, val_cm_disp, val_cls_acc = evaluate(model, val_dataloader, device)
-        writer.add_scalar('Accuracy/train', train_acc, ep)
-        writer.add_scalar('Accuracy/val', val_acc, ep)
-        log_confusion_matrix(train_cm_disp, writer, 'Confusion Matrix/train', ep)
-        log_confusion_matrix(val_cm_disp, writer, 'Confusion Matrix/val', ep)
-        writer.add_text('Class Accuracy/train', train_cls_acc, ep)
-        writer.add_text('Class Accuracy/val', val_cls_acc, ep)
+
+        if args.logging:
+            writer.add_scalar('Loss/train', tr_loss, ep)
+            writer.add_scalar('Accuracy/train', train_acc, ep)
+            log_confusion_matrix(train_cm_disp, writer, 'Confusion Matrix/train', ep)
+            writer.add_text('Class Accuracy/train', train_cls_acc, ep)
+            log_example_images(model, train_dataloader, device, writer, 'train', ep)
+            writer.add_scalar('Accuracy/val', val_acc, ep)
+            log_confusion_matrix(val_cm_disp, writer, 'Confusion Matrix/val', ep)
+            writer.add_text('Class Accuracy/val', val_cls_acc, ep)
+            log_example_images(model, val_dataloader, device, writer, 'val', ep)
 
         end = time.time()
         elapsed = end - start
@@ -178,9 +215,11 @@ def main(args):
     assert best_params is not None
     model.load_state_dict(best_params)
     test_acc, test_cm_disp, test_cls_acc = evaluate(model, test_dataloader, device)
-    writer.add_scalar('Accuracy/test', test_acc, best_val_ep)
-    log_confusion_matrix(test_cm_disp, writer, 'Confusion Matrix/test', ep)
-    writer.add_text('Class Accuracy/test', test_cls_acc, ep)
+    if args.logging:
+        writer.add_scalar('Accuracy/test', test_acc, best_val_ep)
+        log_confusion_matrix(test_cm_disp, writer, 'Confusion Matrix/test', ep)
+        writer.add_text('Class Accuracy/test', test_cls_acc, ep)
+        log_example_images(model, test_dataloader, device, writer, 'test', ep)
     print('Test Acc:{}'.format(test_acc))
 
 

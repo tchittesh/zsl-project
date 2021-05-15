@@ -24,6 +24,7 @@ class ZSLDataset(torch.utils.data.Dataset):
 
         # filter based on split
         self.img_features = torch.Tensor(res101['features'][:, np.squeeze(att_splits[loc]-1)]).permute(1,0) # shape [N,d]
+        self.img_names = [i[0].split('/')[-1] for i in res101['image_files'][np.squeeze(att_splits[loc])-1,0]]
         self.labels = torch.LongTensor(np.squeeze(res101['labels'][np.squeeze(att_splits[loc]-1)])) # shape [N]    
         unique_labels = np.unique(self.labels)
         self.attributes = AWA2_ATTRIBUTES
@@ -62,6 +63,11 @@ class ZSLDataset(torch.utils.data.Dataset):
         label = self.labels[idx]
         class_attributes = self.class_attributes[:,label]
         return {'img': img, 'label': label, 'class_attributes': class_attributes}
+
+    def get_img_path(self, idx):
+        img_name = self.img_names[idx]
+        class_name = img_name.split('_')[0]
+        return f"/mnt/data/Animals_with_Attributes2/JPEGImages/{class_name}/{img_name}"
 
     def get_num_attributes(self):
         return self.class_attributes.shape[0]
@@ -127,6 +133,11 @@ class ZSLSpatialDataset(torch.utils.data.Dataset):
         label = self.labels[idx]
         class_attributes = self.class_attributes[:,label]
         return {'img': img, 'label': label, 'class_attributes': class_attributes}
+
+    def get_img_path(self, idx):
+        img_name = self.img_names[idx]
+        class_name = img_name.split('_')[0]
+        return f"/mnt/data/Animals_with_Attributes2/JPEGImages/{class_name}/{img_name}"
 
     def get_num_attributes(self):
         return self.class_attributes.shape[0]
